@@ -45,31 +45,34 @@ def get_page_sequence_number(pid):
     
     return sequence_number_string
 
+def build_pdf_from_pid(book_pid):
+        logging.info("Building PDF for %s" % book_pid)
+        try:
+            solr_request = requests.get(f"{SOLR_LOCATION}/select?q=RELS_EXT_isPageOf_uri_s%3A%22info%3Afedora%2F{book_pid}%22&fl=PID&wt=json&indent=true&rows=1000000")
+        except:
+            logging.error("Failed to connect to Solr. Are you on the VPN?")
+        page_pids = solr_request.json()['response']['docs']
+        jpg_filenames = []
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            for page_pid in page_pids:
+                page_pid = page_pid['PID']
+                sequence_number_string = get_page_sequence_number(page_pid)
+                jpg_filename = f"{tmp_dir_name}/{sequence_number_string}-{page_pid}.jpg"
+                subprocess.call(f"curl -s {ISLANDORA_OBJECTS_LOCATION}/{page_pid}/datastream/LARGE_JPG/view > {jpg_filename}", shell=True)
+                jpg_filenames.append(jpg_filename)
+            jpg_filenames.sort()
+            jpg_filenames_line = ' '.join(jpg_filenames)
+            pdf_filename = "%s_PDF.pdf" % book_pid.replace(":", "_")
+            img2pdf_command = f"img2pdf {jpg_filenames_line} > {pdf_filename}"
+            img2pdf_return = subprocess.call(img2pdf_command, shell=True)
+            if img2pdf_return != 0:
+                logging.error(f"Failed to build PDF for {book_pid}")
+
+
 if __name__ == "__main__":
 
     argparser = argparse.ArgumentParser(description=description, formatter_class=RawTextHelpFormatter)
     argparser.add_argument('BOOKPID', help="PID of the book you want to make into a PDF. E.g. smith:1322496")
     cliargs = argparser.parse_args()
     book_pid = cliargs.BOOKPID
-
-    logging.info("Building PDF for %s" % book_pid)
-    try:
-        solr_request = requests.get(f"{SOLR_LOCATION}/select?q=RELS_EXT_isPageOf_uri_s%3A%22info%3Afedora%2F{book_pid}%22&fl=PID&wt=json&indent=true&rows=1000000")
-    except:
-        logging.error("Failed to connect to Solr. Are you on the VPN?")
-    page_pids = solr_request.json()['response']['docs']
-    jpg_filenames = []
-    with tempfile.TemporaryDirectory() as tmp_dir_name:
-        for page_pid in page_pids:
-            page_pid = page_pid['PID']
-            sequence_number_string = get_page_sequence_number(page_pid)
-            jpg_filename = f"{tmp_dir_name}/{sequence_number_string}-{page_pid}.jpg"
-            subprocess.call(f"curl -s {ISLANDORA_OBJECTS_LOCATION}/{page_pid}/datastream/LARGE_JPG/view > {jpg_filename}", shell=True)
-            jpg_filenames.append(jpg_filename)
-        jpg_filenames.sort()
-        jpg_filenames_line = ' '.join(jpg_filenames)
-        pdf_filename = "%s_PDF.pdf" % book_pid.replace(":", "_")
-        img2pdf_command = f"img2pdf {jpg_filenames_line} > {pdf_filename}"
-        img2pdf_return = subprocess.call(img2pdf_command, shell=True)
-        if img2pdf_return != 0:
-            logging.error(f"Failed to build PDF for {book_pid}")
+    build_pdf_from_pid(book_pid)
