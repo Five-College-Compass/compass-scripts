@@ -4,6 +4,7 @@ be on the VPN for this to work.
 
 When --collection is used, automagically retrieves PDFs for all books in a given
 collection. Automatically ignores those books that already have PDF datastreams.
+If --force is used then build PDFs even if they already have PDF datastreams.
 
 Example:
 $ python3 book2pdf.py smith:1322496
@@ -29,6 +30,8 @@ import pdb
 
 from islandora_config import Islandora # Custom
 
+logging.basicConfig(level=logging.WARNING)
+
 class Book2Pdf(Islandora):
     def get_page_sequence_number(self, pid):
         """Get the RELS-EXT of a book page and extract the sequence number.
@@ -36,6 +39,7 @@ class Book2Pdf(Islandora):
         try:
             request_url = f"{self.islandora_url}/islandora/object/{pid}/datastream/RELS-EXT/view"
             RELS_EXT_request = requests.get(request_url)
+            RELS_EXT_request.raise_for_status()
             # Use regular expression instead of lxml or beautiful soup for fewer
             # dependencies, and greater resilience to variations in xml namespace/schema versions etc.
             matches = re.search('<islandora:isSequenceNumber>[0-9]+</islandora:isSequenceNumber>', RELS_EXT_request.text)
@@ -46,7 +50,7 @@ class Book2Pdf(Islandora):
         except Exception as e:
             logging.warning(f"Failed to get sequence number for page {pid}")
             logging.debug(e)
-            return ''
+            return 0
         
         return sequence_number
 
@@ -58,6 +62,11 @@ class Book2Pdf(Islandora):
         except:
             logging.error("Failed to connect to Solr. Are you on the VPN?")
         page_pids = solr_request.json()['response']['docs']
+        num_pages = len(page_pids)
+        if num_pages < 1:
+            logging.error(f"No pages found for {book_pid}. Skipping.")
+            return
+        logging.info(f"Getting {num_pages} pages for {book_pid}")
         jpg_filenames = []
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             for page_pid in page_pids:
@@ -65,6 +74,7 @@ class Book2Pdf(Islandora):
                 sequence_number = self.get_page_sequence_number(page_pid)
                 jpg_filename = f"{tmp_dir_name}/{sequence_number:06}-{page_pid}.jpg"
                 curl_command = f"curl -s {self.islandora_url}/islandora/object/{page_pid}/datastream/LARGE_JPG/view > {jpg_filename}"
+                logging.debug(curl_command)
                 subprocess.call(curl_command, shell=True)
                 jpg_filenames.append(jpg_filename)
             jpg_filenames.sort()
