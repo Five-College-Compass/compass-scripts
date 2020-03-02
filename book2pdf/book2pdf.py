@@ -32,12 +32,9 @@ from islandora_config import Islandora # Custom
 class Book2Pdf(Islandora):
     def get_page_sequence_number(self, pid):
         """Get the RELS-EXT of a book page and extract the sequence number.
-        Returns a string in order to preserve existing zero padding.
-        Returns an empty string if fails.
         """
         try:
             request_url = f"{self.islandora_url}/islandora/object/{pid}/datastream/RELS-EXT/view"
-            print(request_url)
             RELS_EXT_request = requests.get(request_url)
             # Use regular expression instead of lxml or beautiful soup for fewer
             # dependencies, and greater resilience to variations in xml namespace/schema versions etc.
@@ -45,13 +42,13 @@ class Book2Pdf(Islandora):
             sequence_tag = matches.group(0)
             # Strip off the xml tags to get just the value
             sequence_tag_value = sequence_tag.replace('<islandora:isSequenceNumber>', '').replace('</islandora:isSequenceNumber>', '')
-            sequence_number_string = sequence_tag_value
+            sequence_number = int(sequence_tag_value)
         except Exception as e:
             logging.warning(f"Failed to get sequence number for page {pid}")
             logging.debug(e)
             return ''
         
-        return sequence_number_string
+        return sequence_number
 
     def build_pdf_from_pid(self, book_pid):
         logging.info("Building PDF for %s" % book_pid)
@@ -65,10 +62,9 @@ class Book2Pdf(Islandora):
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             for page_pid in page_pids:
                 page_pid = page_pid['PID']
-                sequence_number_string = self.get_page_sequence_number(page_pid)
-                jpg_filename = f"{tmp_dir_name}/{sequence_number_string}-{page_pid}.jpg"
+                sequence_number = self.get_page_sequence_number(page_pid)
+                jpg_filename = f"{tmp_dir_name}/{sequence_number:06}-{page_pid}.jpg"
                 curl_command = f"curl -s {self.islandora_url}/islandora/object/{page_pid}/datastream/LARGE_JPG/view > {jpg_filename}"
-                print(curl_command)
                 subprocess.call(curl_command, shell=True)
                 jpg_filenames.append(jpg_filename)
             jpg_filenames.sort()
