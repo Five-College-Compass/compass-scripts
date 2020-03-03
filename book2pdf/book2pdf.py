@@ -19,18 +19,16 @@ Technical notes:
 
 """
 import requests
-import sys
 import tempfile
 import subprocess
 import logging
 import re
 import argparse
 from argparse import RawTextHelpFormatter
-import pdb
 
 from islandora_config import Islandora # Custom
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
 
 class Book2Pdf(Islandora):
     def get_page_sequence_number(self, pid):
@@ -66,7 +64,7 @@ class Book2Pdf(Islandora):
         if num_pages < 1:
             logging.error(f"No pages found for {book_pid}. Skipping.")
             return
-        logging.info(f"Getting {num_pages} pages for {book_pid}")
+        logging.debug(f"Getting {num_pages} pages for {book_pid}")
         jpg_filenames = []
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             for page_pid in page_pids:
@@ -85,7 +83,7 @@ class Book2Pdf(Islandora):
             if img2pdf_return != 0:
                 logging.error(f"Failed to build PDF for {book_pid}")
 
-    def process_whole_collection(self, collection_pid):
+    def process_whole_collection(self, collection_pid, force=False):
         logging.info("Building PDFs from %s" % collection_pid)
         try:
             solr_request = requests.get(f"{self.solr_url}/select?q=RELS_EXT_isMemberOfCollection_uri_s%3A+%22info%3Afedora%2F{collection_pid}%22+AND+RELS_EXT_hasModel_uri_s%3A+%22info%3Afedora%2Fislandora%3AbookCModel%22&rows=10000&fl=PID,fedora_datastreams_ms,fedora_datastream_latest_PDF_SIZE_ms&wt=json&indent=true")
@@ -94,14 +92,20 @@ class Book2Pdf(Islandora):
         books_list = solr_request.json()['response']['docs']
         logging.info("Processing %i books", len(books_list))
         for book_info in books_list:
-            if 'PDF' not in book_info['fedora_datastreams_ms']:
+            if force is True:
+                # Don't check if there's already a PDF, just make one
+                self.build_pdf_from_pid(book_info['PID'])
+            elif 'PDF' not in book_info['fedora_datastreams_ms']:
+                # If not force mode then check if there is a PDF
                 logging.debug("No PDF datastream, building book pdf for %s" % book_info['PID'])
                 self.build_pdf_from_pid(book_info['PID'])
             else:
+                # If there is a PDF datastream but no PDF file then also build one
                 existing_pdf_size = int(book_info['fedora_datastream_latest_PDF_SIZE_ms'][0])
                 if existing_pdf_size < 1:
                     logging.warning("PDF datastream exists but size less than 1, building book PDF for %s" % book_info['PID'])
                     self.build_pdf_from_pid(book_info['PID'])
+
 
 if __name__ == "__main__":
 
@@ -111,9 +115,10 @@ if __name__ == "__main__":
     argparser = argparse.ArgumentParser(description=description, formatter_class=RawTextHelpFormatter)
     argparser.add_argument('PID', help="PID of the book or collection of books you want to make into PDF(s). E.g. smith:1322496")
     argparser.add_argument("--collection", help="Process a whole collection", action="store_true")
+    argparser.add_argument("--force", help="Make PDFs even if there's already and PDF in the PDF datastream", action="store_true")
     cliargs = argparser.parse_args()
     pid = cliargs.PID
     if cliargs.collection is True:
-        book2pdf.process_whole_collection(pid)
+        book2pdf.process_whole_collection(pid, force=cliargs.force)
     else:
         book2pdf.build_pdf_from_pid(pid)
