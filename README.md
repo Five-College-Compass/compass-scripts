@@ -31,3 +31,5 @@ my_tool = NewTool()
 my_tool.load_home_config('prod')
 print(my_tool.get_solr_url())
 ```
+
+See the branch in this repo called "newtool" for a working example.
