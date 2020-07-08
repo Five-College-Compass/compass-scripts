@@ -20,7 +20,7 @@ print(my_islandora.solr_url)
 
 Or, better yet, use a subclass:
 
-```
+``` Python
 from islandora_config import Islandora # Custom
 
 class NewTool(Islandora):
