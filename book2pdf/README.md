@@ -1,3 +1,4 @@
+# book2pdf
 Suck down the pages of an Islandora book and merge them into
 as single PDF. Saves output PDF to current directory. Connects to Solr; you must
 be on the VPN for this to work.
