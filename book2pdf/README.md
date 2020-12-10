@@ -19,3 +19,16 @@ Technical notes:
 - Uses img2pdf to merge jpgs into PDF.
 - Respects page sequence numbers found in RELS-EXT.
 - Requires Python3.
+
+# Setup
+
+```
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+Then you will need to set up the islandora configuration file at `~/.islandora.cfg`. Get a copy from a friend.
+
+```
+python3 book2pdf.py --help
+```
